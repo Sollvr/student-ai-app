@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import OpenAI from 'openai'
 import { storeQuiz } from '@/lib/supabase/quiz-utils'
+import { supabase } from '@/lib/supabase/client'
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY
@@ -66,10 +67,40 @@ export async function POST(request: Request) {
       throw new Error('Failed to store quiz')
     }
 
+    // Get the stored questions with their IDs
+    const { data: questions, error: questionsError } = await supabase
+      .from('questions')
+      .select(`
+        id,
+        question_text,
+        correct_answer,
+        explanation,
+        options (
+          id,
+          option_text,
+          is_correct
+        )
+      `)
+      .eq('quiz_id', storageResult.quizId)
+      .order('question_order', { ascending: true })
+
+    if (questionsError) throw questionsError
+
+    // Format the response to include all necessary IDs
+    const formattedQuiz = questions.map(q => ({
+      id: q.id,
+      quiz_id: storageResult.quizId,
+      question: q.question_text,
+      options: q.options.map((o: any) => o.option_text),
+      correct_answer: q.correct_answer,
+      explanation: q.explanation
+    }))
+
     return NextResponse.json({
-      ...quizData,
-      dbId: storageResult.quizId  // Including database ID in response
+      quiz: formattedQuiz,
+      dbId: storageResult.quizId
     })
+    
   } catch (error) {
     console.error('Error in generate-quiz:', error)
     return NextResponse.json(

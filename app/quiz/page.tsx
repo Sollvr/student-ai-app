@@ -14,6 +14,8 @@ import { Label } from "@/components/ui/label"
 
 import { saveQuizAttempt } from '@/lib/supabase/quiz-score-utils'
 
+import { supabase } from '@/lib/supabase/client'
+
 
 
 type QuizQuestion = {
@@ -63,6 +65,16 @@ export default function QuizApp() {
   const [quizCompleted, setQuizCompleted] = useState(false)
 
   const [finalScore, setFinalScore] = useState<number | null>(null)
+
+  const [allResponses, setAllResponses] = useState<Array<{
+
+    questionId: string;
+
+    selectedOptionId: string;
+
+    isCorrect: boolean;
+
+  }>>([])
 
 
 
@@ -154,66 +166,55 @@ export default function QuizApp() {
 
   const handleAnswerSubmit = async () => {
 
+    if (!selectedAnswer) return;
+    
     const currentQ = quiz[currentQuestion]
-
     const isCorrect = selectedAnswer === currentQ.correct_answer
 
+    try {
+      const { data: optionData, error: optionError } = await supabase
+        .from('options')
+        .select('id')
+        .eq('question_id', currentQ.id)
+        .eq('option_text', selectedAnswer)
+        .single()
 
+      if (optionError) throw optionError
+      if (!optionData) throw new Error('Option not found')
 
-    setResponses(prev => [...prev, {
-
-      questionId: currentQ.id!,
-
-      selectedOptionId: selectedAnswer,
-
-      isCorrect
-
-    }])
-
-
-
-    setShowExplanation(true)
-
-
-
-    if (currentQuestion === quiz.length - 1) {
-
-      const allResponses = [...responses, {
-
+      const newResponse = {
         questionId: currentQ.id!,
-
-        selectedOptionId: selectedAnswer,
-
+        selectedOptionId: optionData.id,
         isCorrect
-
-      }]
-
-
-
-      if (quizId) {
-
-        const result = await saveQuizAttempt({
-
-          quizId,
-
-          responses: allResponses
-
-        })
-
-
-
-        if (result.success) {
-
-          setQuizCompleted(true)
-
-          setFinalScore(result.score ?? null)
-
-        }
-
       }
 
-    }
+      setAllResponses(prev => [...prev, newResponse])
+      
+      setShowExplanation(true)
 
+      if (currentQuestion === quiz.length - 1) {
+        const finalResponses = [...allResponses, newResponse]
+        console.log('Saving quiz attempt with responses:', finalResponses)
+
+        if (quizId) {
+          const result = await saveQuizAttempt({
+            quizId,
+            responses: finalResponses
+          })
+
+          console.log('Save attempt result:', result)
+
+          if (result.success) {
+            setQuizCompleted(true)
+            setFinalScore(result.score ?? null)
+          } else {
+            console.error('Failed to save quiz attempt:', result.error)
+          }
+        }
+      }
+    } catch (error) {
+      console.error('Error handling answer submission:', error)
+    }
   }
 
 
@@ -393,81 +394,6 @@ export default function QuizApp() {
   )
 
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 
