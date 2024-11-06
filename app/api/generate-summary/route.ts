@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import OpenAI from 'openai'
+import { storeSummary } from '../../../lib/supabase/summary-utils'
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY
@@ -45,11 +46,25 @@ export async function POST(request: NextRequest) {
       throw new Error('No summary received from OpenAI')
     }
 
-    return NextResponse.json({ summary })
+    // Store the summary in the database
+    const storageResult = await storeSummary({
+      originalContent: content,
+      summaryText: summary,
+      file: file || undefined
+    })
+
+    if (!storageResult.success) {
+      throw new Error('Failed to store summary')
+    }
+
+    return NextResponse.json({ 
+      summary,
+      summaryId: storageResult.summaryId 
+    })
   } catch (error) {
     console.error('Error in generate-summary:', error)
     return NextResponse.json(
-      { error: 'Failed to generate summary' },
+      { error: 'Failed to generate or store summary' },
       { status: 500 }
     )
   }
